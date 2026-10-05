@@ -1,0 +1,5 @@
+node_modules/
+.env
+core/.cache/
+providers/2dhive.js
+extractors/babastream.js
