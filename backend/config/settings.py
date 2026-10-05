@@ -34,7 +34,7 @@ ALLOWED_HOSTS = ["localhost", "127.0.0.1", ".onrender.com"] + env_list("DJANGO_A
 
 
 # CSRF trusted origins (needed for the /admin login over https)
-CSRF_TRUSTED_ORIGINS = ["https://*.onrender.com"] + env_list("CSRF_TRUSTED_ORIGINS")
+CSRF_TRUSTED_ORIGINS = ["https://anivexa.binamnepal173.workers.dev/m"] + env_list("CSRF_TRUSTED_ORIGINS")
 
 
 if not DEBUG and SECRET_KEY.startswith("dev-insecure"):
