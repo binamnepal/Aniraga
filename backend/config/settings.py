@@ -27,18 +27,14 @@ SECRET_KEY = os.getenv(
 DEBUG = os.getenv("DJANGO_DEBUG", "false").lower() == "true"
 
 
-# Render / production hosts
-ALLOWED_HOSTS = [
-    "anivexa-1.onrender.com",
-    "localhost",
-    "127.0.0.1",
-]
+# Render / production hosts.
+# ".onrender.com" (leading dot) allows any Render address, so you never have to
+# type your exact service name. Extra hosts can be added with DJANGO_ALLOWED_HOSTS.
+ALLOWED_HOSTS = ["localhost", "127.0.0.1", ".onrender.com"] + env_list("DJANGO_ALLOWED_HOSTS")
 
 
-# CSRF trusted origins
-CSRF_TRUSTED_ORIGINS = [
-    "https://anivexa-1.onrender.com",
-]
+# CSRF trusted origins (needed for the /admin login over https)
+CSRF_TRUSTED_ORIGINS = ["https://*.onrender.com"] + env_list("CSRF_TRUSTED_ORIGINS")
 
 
 if not DEBUG and SECRET_KEY.startswith("dev-insecure"):
