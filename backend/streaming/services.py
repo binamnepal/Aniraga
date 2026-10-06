@@ -1,4 +1,5 @@
 """Talks to the Anivexa Node API and normalises its responses for the React player."""
+import os
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
@@ -37,7 +38,8 @@ META_KEYS = {"page", "type", "mappings", "_unknownProviders"}
 
 
 def _get(path, timeout):
-    base = settings.ANIVEXA_API_URL.rstrip("/")
+    # The environment variable wins; the settings value is only a fallback.
+    base = (os.getenv("ANIVEXA_API_URL") or getattr(settings, "ANIVEXA_API_URL", "") or "http://localhost:4000").rstrip("/")
     try:
         res = requests.get(base + path, timeout=timeout, headers={"Accept": "application/json"})
     except requests.RequestException:
