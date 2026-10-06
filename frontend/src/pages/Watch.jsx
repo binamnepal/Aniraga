@@ -95,8 +95,7 @@ export default function Watch() {
         const list = providersRef.current;
         const next = list.find((p) => !tried.current.has(p.id));
         if (next) {
-          const name = list.find((p) => p.id === providerId)?.name || providerId;
-          toast(`${name} didn't respond. Trying ${next.name}...`);
+          toast("That source didn't respond. Trying another one...");
           fetchFrom(next.id);
         } else {
           setLoad({ state: "error", streams: [], provider: providerId, error: e.message });
@@ -132,7 +131,7 @@ export default function Watch() {
     }
     const next = providersRef.current.find((p) => !tried.current.has(p.id));
     if (next) {
-      toast(`Playback failed. Trying ${next.name}...`);
+      toast("Playback failed. Trying another source...");
       fetchFrom(next.id);
     } else {
       setLoad((l) => ({ ...l, state: "error", error: "Playback failed on every source. Try again in a moment." }));
@@ -206,8 +205,7 @@ export default function Watch() {
       <Status title={`No ${audio === "dub" ? "dubbed" : "subbed"} source for episode ${epNum}`} text="Try the other audio track or another episode." />
     );
   } else if (load.state === "loading" || load.state === "idle" || !progress.ready) {
-    const name = providers.find((p) => p.id === load.provider)?.name;
-    slot = <Status busy title={name ? `Loading from ${name}` : "Loading"} text="Switching to another source automatically if this one fails." />;
+    slot = <Status busy title="Loading video" text="Switching to another source automatically if this one fails." />;
   } else if (load.state === "error") {
     slot = (
       <Status title="This episode wouldn't load" text={load.error}>
@@ -278,9 +276,9 @@ export default function Watch() {
               <div className="wc-row">
                 <span className="wc-label">Source</span>
                 <div className="chips">
-                  {providers.map((p) => (
+                  {providers.map((p, i) => (
                     <button key={p.id} type="button" className={`chip-btn ${load.provider === p.id ? "is-on" : ""}`} onClick={() => pickSource(p.id)}>
-                      {p.name}
+                      Source {i + 1}
                     </button>
                   ))}
                 </div>
@@ -292,7 +290,7 @@ export default function Watch() {
                 <div className="chips">
                   {load.streams.map((s, i) => (
                     <button key={`${s.server}-${i}`} type="button" className={`chip-btn ${i === streamIdx ? "is-on" : ""}`} onClick={() => setStreamIdx(i)}>
-                      {s.server}{s.type === "embed" ? " (embed)" : ""}{s.quality ? ` ${s.quality}` : ""}
+                      Server {i + 1}{s.quality ? ` ${s.quality}` : ""}
                     </button>
                   ))}
                 </div>

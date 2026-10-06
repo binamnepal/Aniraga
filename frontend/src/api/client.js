@@ -1,5 +1,5 @@
 const BASE = (import.meta.env.VITE_API_URL || "http://localhost:8000/api").replace(/\/$/, "");
-const KEY = "anivexa.tokens";
+const KEY = "aniraga.tokens";
 
 function readTokens() {
   try {
@@ -70,7 +70,7 @@ export async function api(path, { method = "GET", body, signal, auth = true } = 
   if (res.status === 401 && auth && tokens?.refresh && (await refresh())) res = await send();
   if (res.status === 401 && auth && tokens) {
     setTokens(null);
-    window.dispatchEvent(new Event("anivexa:logout"));
+    window.dispatchEvent(new Event("aniraga:logout"));
   }
   if (res.status === 204) return null;
   let data = null;

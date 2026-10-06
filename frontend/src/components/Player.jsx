@@ -3,6 +3,7 @@ import Hls from "hls.js";
 import Icon from "./Icon";
 
 const SPEEDS = [0.75, 1, 1.25, 1.5, 2];
+const fsElement = () => document.fullscreenElement || document.webkitFullscreenElement || null;
 const typing = () => /input|textarea|select/i.test(document.activeElement?.tagName || "");
 
 /**
@@ -24,6 +25,7 @@ export default function Player({
   const [duration, setDuration] = useState(0);
   const [buffering, setBuffering] = useState(true);
   const [upNext, setUpNext] = useState(null); // seconds left before auto-next
+  const [isFs, setIsFs] = useState(false);
 
   // Always call the latest callbacks without re-attaching the stream.
   const cb = useRef({});
@@ -58,7 +60,18 @@ export default function Player({
     };
 
     if (stream.type === "hls" && Hls.isSupported()) {
-      hls = new Hls({ enableWorker: true, maxBufferLength: 45 });
+      hls = new Hls({
+        enableWorker: true,
+        lowLatencyMode: false,
+        startFragPrefetch: true, // begin fetching the first segment while the playlist is still parsing
+        capLevelToPlayerSize: true, // don't pull 1080p into a small player
+        maxBufferLength: 40,
+        maxMaxBufferLength: 90,
+        backBufferLength: 30,
+        manifestLoadingMaxRetry: 2,
+        levelLoadingMaxRetry: 2,
+        fragLoadingMaxRetry: 4,
+      });
       hlsRef.current = hls;
       hls.loadSource(stream.play_url);
       hls.attachMedia(v);
@@ -150,10 +163,41 @@ export default function Player({
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // Fullscreen the whole player (not just the <video>) so Skip intro, Next episode and the
+  // quality/speed bar keep working. iPhone Safari can only fullscreen the <video> itself.
   const toggleFullscreen = () => {
-    if (document.fullscreenElement) document.exitFullscreen?.();
-    else wrap.current?.requestFullscreen?.();
+    const el = wrap.current;
+    const v = video.current;
+    if (fsElement()) {
+      (document.exitFullscreen || document.webkitExitFullscreen)?.call(document);
+      return;
+    }
+    if (!el) return;
+    if (el.requestFullscreen || el.webkitRequestFullscreen) {
+      const req = (el.requestFullscreen || el.webkitRequestFullscreen).call(el);
+      Promise.resolve(req)
+        .then(() => screen.orientation?.lock?.("landscape")) // phones: turn to landscape
+        .catch(() => {});
+    } else if (v?.webkitEnterFullscreen) {
+      v.webkitEnterFullscreen();
+    }
   };
+
+  useEffect(() => {
+    const onChange = () => {
+      const on = fsElement() === wrap.current;
+      setIsFs(on);
+      if (!on) {
+        try { screen.orientation?.unlock?.(); } catch { /* not supported */ }
+      }
+    };
+    document.addEventListener("fullscreenchange", onChange);
+    document.addEventListener("webkitfullscreenchange", onChange);
+    return () => {
+      document.removeEventListener("fullscreenchange", onChange);
+      document.removeEventListener("webkitfullscreenchange", onChange);
+    };
+  }, []);
 
   const pickLevel = (value) => {
     const n = Number(value);
@@ -176,6 +220,17 @@ export default function Player({
           allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
           allowFullScreen
         />
+        <div className="player-tools">
+        <button
+          type="button"
+          className="icon-btn glass"
+          onClick={toggleFullscreen}
+          aria-label={isFs ? "Exit fullscreen (f)" : "Fullscreen (f)"}
+          title={isFs ? "Exit fullscreen (f)" : "Fullscreen (f)"}
+        >
+          <Icon name={isFs ? "compress" : "expand"} size={18} />
+        </button>
+        </div>
       </div>
     );
   }
@@ -188,7 +243,9 @@ export default function Player({
         controls
         controlsList="nofullscreen"
         playsInline
+        preload="auto"
         crossOrigin="anonymous"
+        onDoubleClick={toggleFullscreen}
         onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
         onTimeUpdate={(e) => {
           setNow(e.currentTarget.currentTime);
@@ -216,8 +273,14 @@ export default function Player({
       {buffering && <div className="player-spin" aria-label="Loading video" />}
 
       <div className="player-tools">
-        <button type="button" className="icon-btn glass" onClick={toggleFullscreen} aria-label="Fullscreen (f)">
-          <Icon name="expand" size={18} />
+        <button
+          type="button"
+          className="icon-btn glass"
+          onClick={toggleFullscreen}
+          aria-label={isFs ? "Exit fullscreen (f)" : "Fullscreen (f)"}
+          title={isFs ? "Exit fullscreen (f)" : "Fullscreen (f)"}
+        >
+          <Icon name={isFs ? "compress" : "expand"} size={18} />
         </button>
       </div>
 

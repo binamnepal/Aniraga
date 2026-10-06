@@ -4,7 +4,7 @@ import Icon from "./Icon";
 const SIZE = 100;
 
 export default function EpisodeList({ episodes, current, audio, watched, onSelect, height }) {
-  const [view, setView] = useState(() => localStorage.getItem("anivexa.epview") || "grid");
+  const [view, setView] = useState(() => localStorage.getItem("aniraga.epview") || "grid");
   const ranges = useMemo(() => {
     const out = new Map();
     episodes.forEach((e) => {
@@ -17,7 +17,7 @@ export default function EpisodeList({ episodes, current, audio, watched, onSelec
   const [group, setGroup] = useState(Math.floor(((current || 1) - 1) / SIZE));
 
   useEffect(() => setGroup(Math.floor(((current || 1) - 1) / SIZE)), [current]);
-  useEffect(() => localStorage.setItem("anivexa.epview", view), [view]);
+  useEffect(() => localStorage.setItem("aniraga.epview", view), [view]);
 
   const shown = ranges.find(([g]) => g === group)?.[1] || ranges[0]?.[1] || [];
 

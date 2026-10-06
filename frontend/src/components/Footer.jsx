@@ -14,7 +14,7 @@ export default function Footer() {
           <Link to="/schedule">Schedule</Link>
         </nav>
         <p>
-          Anivexa does not store any files on its servers. All video is provided by third-party sources, and the
+          Aniraga does not store any files on its servers. All video is provided by third-party sources, and the
           catalog comes from AniList.
         </p>
       </div>

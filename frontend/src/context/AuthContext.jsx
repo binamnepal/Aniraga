@@ -19,8 +19,8 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     const onLogout = () => setUser(null);
-    window.addEventListener("anivexa:logout", onLogout);
-    return () => window.removeEventListener("anivexa:logout", onLogout);
+    window.addEventListener("aniraga:logout", onLogout);
+    return () => window.removeEventListener("aniraga:logout", onLogout);
   }, []);
 
   const finish = useCallback(async (payload) => {

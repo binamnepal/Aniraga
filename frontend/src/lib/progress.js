@@ -1,6 +1,6 @@
 import { Lib } from "../api/client";
 
-const LS = "anivexa.progress";
+const LS = "aniraga.progress";
 
 function readLocal() {
   try {

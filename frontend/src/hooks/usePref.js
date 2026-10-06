@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 export function usePref(key, initial) {
   const [value, setValue] = useState(() => {
     try {
-      const raw = localStorage.getItem(`anivexa.${key}`);
+      const raw = localStorage.getItem(`aniraga.${key}`);
       return raw === null ? initial : JSON.parse(raw);
     } catch {
       return initial;
@@ -12,7 +12,7 @@ export function usePref(key, initial) {
   });
   useEffect(() => {
     try {
-      localStorage.setItem(`anivexa.${key}`, JSON.stringify(value));
+      localStorage.setItem(`aniraga.${key}`, JSON.stringify(value));
     } catch {
       /* private mode */
     }

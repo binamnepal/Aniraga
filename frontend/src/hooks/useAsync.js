@@ -25,6 +25,6 @@ export function useAsync(fn, deps) {
 
 export function usePageTitle(title) {
   useEffect(() => {
-    document.title = title ? `${title} - Anivexa` : "Anivexa - watch anime online";
+    document.title = title ? `${title} - Aniraga` : "Aniraga - watch anime online";
   }, [title]);
 }
