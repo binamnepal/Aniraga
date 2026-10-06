@@ -1,6 +1,7 @@
 """Talks to the Anivexa Node API and normalises its responses for the React player."""
 import os
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 import requests
@@ -40,16 +41,29 @@ META_KEYS = {"page", "type", "mappings", "_unknownProviders"}
 def _get(path, timeout):
     # The environment variable wins; the settings value is only a fallback.
     base = (os.getenv("ANIVEXA_API_URL") or getattr(settings, "ANIVEXA_API_URL", "") or "http://localhost:4000").rstrip("/")
-    try:
-        res = requests.get(base + path, timeout=timeout, headers={"Accept": "application/json"})
-    except requests.RequestException:
-        raise ProviderError("The streaming API is not reachable. Is the Anivexa API running?")
+    res = None
+    for attempt in range(2):
+        try:
+            res = requests.get(base + path, timeout=timeout, headers={"Accept": "application/json"})
+        except requests.RequestException:
+            raise ProviderError("The streaming API is not reachable. Is the Anivexa API running?")
+        # A sleeping free-tier service can answer 502/503/504 while it wakes up: wait and retry once.
+        if res.status_code in (502, 503, 504) and attempt == 0:
+            time.sleep(8)
+            continue
+        break
     try:
         data = res.json()
     except ValueError:
-        raise ProviderError("The streaming API returned something unexpected.")
+        raise ProviderError(
+            f"The streaming API returned something unexpected (HTTP {res.status_code}). "
+            "Check that the Node service is Live and that ANIVEXA_API_URL points to it."
+        )
     if res.status_code >= 400:
-        raise ProviderError(str(data.get("error") or "The source returned an error.")[:200])
+        message = data.get("error") if isinstance(data, dict) else None
+        raise ProviderError(str(message or f"The streaming API returned an error (HTTP {res.status_code}).")[:200])
+    if not isinstance(data, dict):
+        raise ProviderError("The streaming API returned an unexpected response.")
     return data
 
 
