@@ -1,4 +1,4 @@
-"""Talks to the Aniraga Node API and normalises its responses for the React player."""
+"""Talks to the Anivexa Node API and normalises its responses for the React player."""
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
@@ -8,8 +8,6 @@ from django.core.cache import cache
 from rest_framework.exceptions import APIException, ValidationError
 
 from . import proxy
-
-_http = requests.Session()  # reuse connections to the Node API
 
 
 class ProviderError(APIException):
@@ -39,11 +37,11 @@ META_KEYS = {"page", "type", "mappings", "_unknownProviders"}
 
 
 def _get(path, timeout):
-    base = settings.ANIRAGA_API_URL.rstrip("/")
+    base = settings.ANIVEXA_API_URL.rstrip("/")
     try:
-        res = _http.get(base + path, timeout=timeout, headers={"Accept": "application/json"})
+        res = requests.get(base + path, timeout=timeout, headers={"Accept": "application/json"})
     except requests.RequestException:
-        raise ProviderError("The streaming API is not reachable. Is the Aniraga API running?")
+        raise ProviderError("The streaming API is not reachable. Is the Anivexa API running?")
     try:
         data = res.json()
     except ValueError:
@@ -65,8 +63,8 @@ def _as_int(value):
 # but never holds up the first response.
 FAST = ["reanime", "anizone", "aniwaves", "anikoto"]
 SLOW = [p for p in PROVIDERS if p not in FAST]
-FAST_TIMEOUT = 45
-SLOW_TIMEOUT = 100
+FAST_TIMEOUT = 90   # a sleeping free-tier Node API needs ~50s just to wake up
+SLOW_TIMEOUT = 120
 
 _pool = ThreadPoolExecutor(max_workers=8, thread_name_prefix="eps")
 _lock = threading.Lock()
@@ -74,11 +72,15 @@ _inflight = {}  # anilist_id -> (fast_future, slow_future)
 
 
 def _fetch_group(anilist_id, names, timeout):
-    """One Node call for a group of providers. Never raises: a failed group is just empty."""
+    """One Node call for a group of providers.
+
+    Never raises: a failed group comes back as {"_error": "..."} so the caller can tell
+    "the API is down" apart from "the API answered but nobody has this title".
+    """
     try:
         return _get(f"/episodes/{'/'.join(names)}/{int(anilist_id)}?map=false", timeout=timeout)
-    except Exception:
-        return {}
+    except Exception as exc:
+        return {"_error": str(getattr(exc, "detail", exc))[:200]}
 
 
 def _build(anilist_id, raw, complete):
@@ -118,8 +120,10 @@ def _finish(anilist_id, fast_raw, slow_future):
         slow_raw = slow_future.result()
     except Exception:
         slow_raw = {}
-    full = _build(anilist_id, {**fast_raw, **slow_raw}, True)
-    cache.set(f"eps:{anilist_id}", full, 600 if full["providers"] else 60)
+    both_failed = "_error" in fast_raw and "_error" in slow_raw
+    if not both_failed:
+        full = _build(anilist_id, {**fast_raw, **slow_raw}, True)
+        cache.set(f"eps:{anilist_id}", full, 600 if full["providers"] else 60)
     with _lock:
         _inflight.pop(anilist_id, None)
 
@@ -150,7 +154,11 @@ def get_episodes(anilist_id):
         cache.set(key, quick, 60)
         return quick
     # Nothing from the fast group: the slow sources are all we have, so wait for them.
-    full = _build(anilist_id, {**fast_raw, **slow.result()}, True)
+    slow_raw = slow.result()
+    if "_error" in fast_raw and "_error" in slow_raw:
+        # Not "no episodes": the streaming API itself failed. Say so, and don't cache it.
+        raise ProviderError(fast_raw["_error"])
+    full = _build(anilist_id, {**fast_raw, **slow_raw}, True)
     cache.set(key, full, 600 if full["providers"] else 60)
     return full
 
@@ -201,17 +209,10 @@ def get_streams(request, provider, anilist_id, audio, episode):
         raise ValidationError({"provider": "Unknown source."})
     if audio not in ("sub", "dub"):
         raise ValidationError({"audio": "Use sub or dub."})
-    # The upstream lookup is the slowest step, so remember it for a few minutes. Replays,
-    # source switches and a second viewer of the same episode then start almost instantly.
-    cache_key = f"watch:{provider}:{int(anilist_id)}:{audio}:{int(episode)}"
-    data = cache.get(cache_key)
-    if data is None:
-        data = _get(
-            f"/watch/{provider}/{int(anilist_id)}/{audio}/{provider}-{int(episode)}",
-            timeout=75 if provider == "mkissa" else 25,
-        )
-        if data.get("streams"):
-            cache.set(cache_key, data, 180)
+    data = _get(
+        f"/watch/{provider}/{int(anilist_id)}/{audio}/{provider}-{int(episode)}",
+        timeout=75 if provider == "mkissa" else 35,
+    )
 
     top_intro, top_outro = _range(data.get("intro")), _range(data.get("outro"))
     streams = []
