@@ -274,12 +274,13 @@ CORS_EXPOSE_HEADERS = [
 
 
 # ---------------------------------------------------------------------
-# Anivexa Streaming API
+# Aniraga Streaming API
 # ---------------------------------------------------------------------
 
-ANIVEXA_API_URL = os.getenv(
-    "ANIVEXA_API_URL",
-    "http://localhost:4000",
+# ANIVEXA_API_URL is the old name; still read so existing deployments keep working.
+ANIRAGA_API_URL = os.getenv(
+    "ANIRAGA_API_URL",
+    os.getenv("ANIVEXA_API_URL", "http://localhost:4000"),
 )
 
 

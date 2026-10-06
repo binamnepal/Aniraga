@@ -3,7 +3,7 @@
 Many hosts only serve video when the request carries their own Referer, which a
 browser will not let us set. This view fetches the file server-side, rewrites HLS
 playlists so every segment also goes through us, and handles the two ReAnime /
-FlixCloud tricks described in the Anivexa API README (XOR-encrypted manifests and
+FlixCloud tricks described in the Aniraga API README (XOR-encrypted manifests and
 image-wrapped segments).
 
 Only URLs that this backend itself signed can be fetched, so it is not an open proxy.
@@ -14,9 +14,11 @@ import hmac
 import ipaddress
 import re
 import socket
+import time
 from urllib.parse import urlencode, urljoin, urlparse
 
 import requests
+from requests.adapters import HTTPAdapter
 from django.conf import settings
 from django.http import HttpResponse, StreamingHttpResponse
 from django.urls import reverse
@@ -50,14 +52,41 @@ def build_url(request, url, referer=None, key=None):
     return request.build_absolute_uri(reverse("stream-proxy")) + "?" + urlencode(params)
 
 
+# One shared session: reuses TCP/TLS connections to the video hosts instead of opening a
+# fresh connection (and doing a TLS handshake) for every single segment.
+_session = requests.Session()
+_session.mount("http://", HTTPAdapter(pool_connections=32, pool_maxsize=64))
+_session.mount("https://", HTTPAdapter(pool_connections=32, pool_maxsize=64))
+
+# Hostname -> (expires_at, is_public). A video has hundreds of segments on the same few
+# hosts, so resolving DNS for each one only added delay.
+_DNS_TTL = 300
+_dns_cache = {}
+
+
+def _host_is_public(host, port):
+    now = time.monotonic()
+    hit = _dns_cache.get((host, port))
+    if hit and hit[0] > now:
+        return hit[1]
+    try:
+        infos = socket.getaddrinfo(host, port)
+        ok = all(ipaddress.ip_address(i[4][0]).is_global for i in infos)
+    except (ValueError, OSError):
+        ok = False
+    if len(_dns_cache) > 2000:
+        _dns_cache.clear()
+    _dns_cache[(host, port)] = (now + _DNS_TTL, ok)
+    return ok
+
+
 def _is_public(url):
     try:
         parts = urlparse(url)
         if parts.scheme not in ("http", "https") or not parts.hostname:
             return False
-        infos = socket.getaddrinfo(parts.hostname, parts.port or (443 if parts.scheme == "https" else 80))
-        return all(ipaddress.ip_address(i[4][0]).is_global for i in infos)
-    except (ValueError, OSError):
+        return _host_is_public(parts.hostname, parts.port or (443 if parts.scheme == "https" else 80))
+    except ValueError:
         return False
 
 
@@ -66,7 +95,7 @@ def _open(url, headers):
     for _ in range(4):
         if not _is_public(url):
             return None, url
-        res = requests.get(url, headers=headers, stream=True, timeout=(8, 30), allow_redirects=False)
+        res = _session.get(url, headers=headers, stream=True, timeout=(8, 30), allow_redirects=False)
         if res.status_code in (301, 302, 303, 307, 308) and res.headers.get("Location"):
             url = urljoin(url, res.headers["Location"])
             res.close()
@@ -146,7 +175,7 @@ def stream_proxy(request):
         upstream.close()
         return _text(f"Upstream returned {code}", 502 if code >= 500 else code)
 
-    chunks = upstream.iter_content(65536)
+    chunks = upstream.iter_content(262144)
     first = next(chunks, b"")
 
     is_plain_playlist = first.lstrip()[:7] == b"#EXTM3U"
@@ -170,7 +199,7 @@ def stream_proxy(request):
             _rewrite_playlist(request, text, final_url, referer, key),
             content_type="application/vnd.apple.mpegurl",
         )
-        response["Cache-Control"] = "no-store"
+        response["Cache-Control"] = "public, max-age=120"
         return response
 
     # Image-wrapped FlixCloud segments (PNG / WEBP with TS inside) need unwrapping.

@@ -10,7 +10,7 @@ from rest_framework.exceptions import APIException, NotFound
 log = logging.getLogger(__name__)
 
 ANILIST_URL = "https://graphql.anilist.co"
-HEADERS = {"Content-Type": "application/json", "Accept": "application/json", "User-Agent": "AnivexaSite/1.0"}
+HEADERS = {"Content-Type": "application/json", "Accept": "application/json", "User-Agent": "AniragaSite/1.0"}
 
 
 class UpstreamError(APIException):

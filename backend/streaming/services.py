@@ -1,4 +1,4 @@
-"""Talks to the Anivexa Node API and normalises its responses for the React player."""
+"""Talks to the Aniraga Node API and normalises its responses for the React player."""
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
@@ -8,6 +8,8 @@ from django.core.cache import cache
 from rest_framework.exceptions import APIException, ValidationError
 
 from . import proxy
+
+_http = requests.Session()  # reuse connections to the Node API
 
 
 class ProviderError(APIException):
@@ -37,11 +39,11 @@ META_KEYS = {"page", "type", "mappings", "_unknownProviders"}
 
 
 def _get(path, timeout):
-    base = settings.ANIVEXA_API_URL.rstrip("/")
+    base = settings.ANIRAGA_API_URL.rstrip("/")
     try:
-        res = requests.get(base + path, timeout=timeout, headers={"Accept": "application/json"})
+        res = _http.get(base + path, timeout=timeout, headers={"Accept": "application/json"})
     except requests.RequestException:
-        raise ProviderError("The streaming API is not reachable. Is the Anivexa API running?")
+        raise ProviderError("The streaming API is not reachable. Is the Aniraga API running?")
     try:
         data = res.json()
     except ValueError:
@@ -199,10 +201,17 @@ def get_streams(request, provider, anilist_id, audio, episode):
         raise ValidationError({"provider": "Unknown source."})
     if audio not in ("sub", "dub"):
         raise ValidationError({"audio": "Use sub or dub."})
-    data = _get(
-        f"/watch/{provider}/{int(anilist_id)}/{audio}/{provider}-{int(episode)}",
-        timeout=75 if provider == "mkissa" else 35,
-    )
+    # The upstream lookup is the slowest step, so remember it for a few minutes. Replays,
+    # source switches and a second viewer of the same episode then start almost instantly.
+    cache_key = f"watch:{provider}:{int(anilist_id)}:{audio}:{int(episode)}"
+    data = cache.get(cache_key)
+    if data is None:
+        data = _get(
+            f"/watch/{provider}/{int(anilist_id)}/{audio}/{provider}-{int(episode)}",
+            timeout=75 if provider == "mkissa" else 25,
+        )
+        if data.get("streams"):
+            cache.set(cache_key, data, 180)
 
     top_intro, top_outro = _range(data.get("intro")), _range(data.get("outro"))
     streams = []
