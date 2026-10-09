@@ -38,20 +38,41 @@ PROVIDERS = {
 META_KEYS = {"page", "type", "mappings", "_unknownProviders"}
 
 
-def _get(path, timeout):
+# Statuses a sleeping free-tier service answers with while it wakes up.
+_WAKING = (502, 503, 504)
+# Pauses between retries (seconds). Total ~58s, enough for a Render cold start (~30-50s).
+_RETRY_DELAYS = (3, 5, 8, 10, 12, 20)
+# Never keep retrying longer than this, whatever the per-request timeout is.
+_WAKE_BUDGET = 75
+
+
+def _node_base():
     # The environment variable wins; the settings value is only a fallback.
-    base = (os.getenv("ANIVEXA_API_URL") or getattr(settings, "ANIVEXA_API_URL", "") or "http://localhost:4000").rstrip("/")
+    return (os.getenv("ANIVEXA_API_URL") or getattr(settings, "ANIVEXA_API_URL", "") or "http://localhost:4000").rstrip("/")
+
+
+def _get(path, timeout):
+    base = _node_base()
+    deadline = time.monotonic() + max(timeout, _WAKE_BUDGET)
     res = None
-    for attempt in range(2):
+    last_error = None
+    for attempt in range(len(_RETRY_DELAYS) + 1):
+        res, last_error = None, None
         try:
             res = requests.get(base + path, timeout=timeout, headers={"Accept": "application/json"})
-        except requests.RequestException:
-            raise ProviderError("The streaming API is not reachable. Is the Anivexa API running?")
-        # A sleeping free-tier service can answer 502/503/504 while it wakes up: wait and retry once.
-        if res.status_code in (502, 503, 504) and attempt == 0:
-            time.sleep(8)
-            continue
+        except requests.RequestException as exc:
+            last_error = exc
+        # A sleeping free-tier service answers 502/503/504 (or times out) while it wakes up:
+        # wait and retry instead of failing on the first try.
+        waking = last_error is not None or res.status_code in _WAKING
+        if waking and attempt < len(_RETRY_DELAYS):
+            delay = _RETRY_DELAYS[attempt]
+            if time.monotonic() + delay < deadline:
+                time.sleep(delay)
+                continue
         break
+    if res is None:
+        raise ProviderError("The streaming API is not reachable. It may still be waking up, please try again in a moment.")
     try:
         data = res.json()
     except ValueError:
@@ -65,6 +86,16 @@ def _get(path, timeout):
     if not isinstance(data, dict):
         raise ProviderError("The streaming API returned an unexpected response.")
     return data
+
+
+def warm_up():
+    """Fire-and-forget ping so a sleeping Node service starts waking before it is needed."""
+    def _ping():
+        try:
+            requests.get(_node_base() + "/health", timeout=90)
+        except requests.RequestException:
+            pass
+    threading.Thread(target=_ping, daemon=True).start()
 
 
 def _as_int(value):

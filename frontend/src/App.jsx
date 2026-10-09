@@ -10,6 +10,7 @@ import NotFound from "./pages/NotFound";
 import Profile from "./pages/Profile";
 import Schedule from "./pages/Schedule";
 import Watch from "./pages/Watch";
+import { Stream } from "./api/client";
 
 function Layout() {
   const { pathname } = useLocation();
@@ -29,6 +30,9 @@ function Layout() {
 }
 
 export default function App() {
+  useEffect(() => {
+    Stream.warm();
+  }, []);
   return (
     <Routes>
       <Route element={<Layout />}>

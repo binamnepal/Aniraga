@@ -101,6 +101,8 @@ export const Anime = {
 };
 
 export const Stream = {
+  // Wakes the sleeping Render services (Django, then Node) before they are needed.
+  warm: () => fetch(`${BASE}/streaming/warm/`).catch(() => {}),
   episodes: (id, signal) => api(`/streaming/episodes/${id}/`, { signal }),
   watch: (id, { provider, audio, ep }, signal) =>
     api(`/streaming/watch/${id}/?${qs({ provider, audio, ep })}`, { signal }),

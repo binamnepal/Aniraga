@@ -20,3 +20,10 @@ def watch(request, anilist_id):
     return Response(
         services.get_streams(request, q.get("provider", ""), anilist_id, q.get("audio", "sub"), episode)
     )
+
+
+@api_view(["GET"])
+def warm(request):
+    """Frontend calls this on page load so the Node service is awake by the time it is needed."""
+    services.warm_up()
+    return Response({"ok": True})

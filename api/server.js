@@ -51,6 +51,11 @@ const server = http.createServer(async (req, res) => {
   console.log(`→ ${req.method} ${req.url}`);
 
   const pathname = req.url.split("?")[0];
+
+  if (pathname === "/health") {
+    res.writeHead(200, { "Content-Type": "text/plain", "Cache-Control": "no-store" });
+    return res.end("ok");
+  }
   const staticEntry = STATIC[pathname];
 
   if (req.method === "GET" && staticEntry) {
@@ -74,6 +79,6 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, () => {
+server.listen(PORT, "0.0.0.0", () => {
   console.log(`Anivexa dev server → http://localhost:${PORT}`);
 });
